@@ -4,22 +4,17 @@ import re
 import tkinter as tk
 from tkinter import scrolledtext, messagebox, filedialog
 
-def preprocess_text(text):
-    
-    # Удаляем все символы, кроме букв и пробелов
+def cleaning_text(text):
     text = re.sub(r'[^\w\s]', ' ', text)
-    # Приводим к нижнему регистру
     text = text.lower()
-    # Разбиваем на слова
+
     words = text.split()
     return words
 
 def generate_shingles(words, shingle_size=3):
-    
     shingles = []
     if len(words) < shingle_size:
         return shingles
-
     for i in range(len(words) - shingle_size + 1):
         shingle = words[i:i + shingle_size]
         shingle_str = ' '.join(shingle)
@@ -27,29 +22,19 @@ def generate_shingles(words, shingle_size=3):
     return shingles
 
 def hash_shingle(shingle):
-    
     return hashlib.md5(shingle.encode('utf-8')).hexdigest()
 
-def calculate_uniqueness_for_pair(text1_words, text2_words, shingle_size):
-    
-    # Генерация шинглов
+def uniqueness(text1_words, text2_words, shingle_size):
     shingles1 = generate_shingles(text1_words, shingle_size)
     shingles2 = generate_shingles(text2_words, shingle_size)
-
     if not shingles1 or not shingles2:
-        return 100.0  # Если нет шинглов для сравнения, считаем текст уникальным
-
-    # Хеширование
+        return 100.0
     hashes1 = [hash_shingle(s) for s in shingles1]
     hashes2_set = set([hash_shingle(s) for s in shingles2])
-
-    # Подсчет совпадений
     matches = 0
     for h in hashes1:
         if h in hashes2_set:
             matches += 1
-
-    # Расчет уникальности
     total = len(hashes1)
     uniqueness = ((total - matches) / total) * 100
     return round(uniqueness, 2)
