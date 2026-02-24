@@ -4,225 +4,165 @@ import re
 import tkinter as tk
 from tkinter import scrolledtext, messagebox, filedialog
 
-def cleaning_text(text):
-    text = re.sub(r'[^\w\s]', ' ', text)
-    text = text.lower()
+def clr(t):
+    t = re.sub(r'[^\w\s]', ' ', t)
+    t = t.lower()
+    return t.split()
 
-    words = text.split()
-    return words
+def sh(w, n=3):
+    r = []
+    if len(w) < n:
+        return r
+    for i in range(len(w) - n + 1):
+        s = w[i:i + n]
+        r.append(' '.join(s))
+    return r
 
-def generate_shingles(words, shingle_size=3):
-    shingles = []
-    if len(words) < shingle_size:
-        return shingles
-    for i in range(len(words) - shingle_size + 1):
-        shingle = words[i:i + shingle_size]
-        shingle_str = ' '.join(shingle)
-        shingles.append(shingle_str)
-    return shingles
+def hsh(s):
+    return hashlib.md5(s.encode('utf-8')).hexdigest()
 
-def hash_shingle(shingle):
-    return hashlib.md5(shingle.encode('utf-8')).hexdigest()
-
-def uniqueness(text1_words, text2_words, shingle_size):
-    shingles1 = generate_shingles(text1_words, shingle_size)
-    shingles2 = generate_shingles(text2_words, shingle_size)
-    if not shingles1 or not shingles2:
+def cmp(w1, w2, n):
+    s1 = sh(w1, n)
+    s2 = sh(w2, n)
+    if not s1 or not s2:
         return 100.0
-    hashes1 = [hash_shingle(s) for s in shingles1]
-    hashes2_set = set([hash_shingle(s) for s in shingles2])
-    matches = 0
-    for h in hashes1:
-        if h in hashes2_set:
-            matches += 1
-    total = len(hashes1)
-    uniqueness = ((total - matches) / total) * 100
-    return round(uniqueness, 2)
+    h1 = [hsh(x) for x in s1]
+    h2 = set([hsh(x) for x in s2])
+    c = 0
+    for x in h1:
+        if x in h2:
+            c += 1
+    return round(((len(h1) - c) / len(h1)) * 100, 2)
 
-def load_library_from_folder(folder_path="library"):
-    
-    library = {}
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)  # Создаем папку, если её нет
-        return library
-
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".txt"):
-            file_path = os.path.join(folder_path, filename)
+def load(p="library"):
+    lib = {}
+    if not os.path.exists(p):
+        os.makedirs(p)
+        return lib
+    for f in os.listdir(p):
+        if f.endswith(".txt"):
+            fp = os.path.join(p, f)
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    text = f.read()
-                # Сразу обрабатываем текст и сохраняем слова
-                words = preprocess_text(text)
-                library[filename] = words
-                print(f"Загружен файл: {filename} ({len(words)} слов)")
+                with open(fp, 'r', encoding='utf-8') as file:
+                    txt = file.read()
+                lib[f] = clr(txt)
+                print(f"Загружен: {f} ({len(lib[f])} слов)")
             except Exception as e:
-                print(f"Ошибка загрузки {filename}: {e}")
-    return library
+                print(f"Ошибка {f}: {e}")
+    return lib
 
-def check_text_against_library(check_words, library, shingle_size):
-    
-    if not library:
-        return 100.0, "Библиотека пуста"
+def chk(w, lib, n):
+    if not lib:
+        return 100.0, "Пусто"
+    m = 100.0
+    src = "Нет"
+    for name, words in lib.items():
+        u = cmp(w, words, n)
+        print(f"  {name}: {u}%")
+        if u < m:
+            m = u
+            src = name
+    return m, src
 
-    min_uniqueness = 100.0
-    worst_source = "Не найдено"
-
-    for filename, lib_words in library.items():
-        uniqueness = calculate_uniqueness_for_pair(check_words, lib_words, shingle_size)
-        # Логируем промежуточные результаты
-        print(f"  Сравнение с {filename}: уникальность {uniqueness}%")
-        if uniqueness < min_uniqueness:
-            min_uniqueness = uniqueness
-            worst_source = filename
-
-    return min_uniqueness, worst_source
-
-class AntiplagiatApp:
+class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("Прототип Антиплагиата (с библиотекой)")
+        self.root.title("Антиплагиат")
         self.root.geometry("750x600")
+        self.lib = load("library")
+        self.st = f"Файлов: {len(self.lib)}"
+        self.ui()
 
-        # Загружаем библиотеку при старте
-        self.library = load_library_from_folder("library")
-        self.lib_status = f"Библиотека: {len(self.library)} файлов загружено"
+    def ui(self):
+        tk.Label(self.root, text=self.st).pack(pady=5)
+        tk.Button(self.root, text="Обновить", command=self.ref).pack()
+        f = tk.Frame(self.root)
+        f.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        tk.Label(f, text="Текст:").pack(anchor=tk.W)
+        self.t_in = scrolledtext.ScrolledText(f, height=8)
+        self.t_in.pack(fill=tk.BOTH, expand=True)
+        tk.Button(f, text="Загрузить", command=self.get).pack(pady=2)
+        s = tk.Frame(self.root)
+        s.pack(pady=5)
+        tk.Label(s, text="Шингл:").pack(side=tk.LEFT)
+        self.n_in = tk.Entry(s, width=5)
+        self.n_in.insert(0, "3")
+        self.n_in.pack(side=tk.LEFT, padx=5)
+        tk.Button(s, text="Проверить", command=self.run).pack(side=tk.LEFT, padx=10)
+        r = tk.Frame(self.root)
+        r.pack(fill=tk.X, padx=10, pady=5)
+        self.r1 = tk.Label(r, text="Уникальность: --%", font=("Arial", 14, "bold"))
+        self.r1.pack()
+        self.r2 = tk.Label(r, text="Источник: --")
+        self.r2.pack()
+        l = tk.Frame(self.root)
+        l.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        tk.Label(l, text="Отчёт о проверке:").pack(anchor=tk.W)
+        self.log = scrolledtext.ScrolledText(l, height=6, state=tk.DISABLED)
+        self.log.pack(fill=tk.BOTH, expand=True)
 
-        self.create_widgets()
-
-    def create_widgets(self):
-        # Статус библиотеки
-        lib_label = tk.Label(self.root, text=self.lib_status, font=("Arial", 10))
-        lib_label.pack(pady=5)
-
-        # Кнопка обновления библиотеки
-        refresh_btn = tk.Button(self.root, text="Обновить библиотеку", command=self.refresh_library)
-        refresh_btn.pack(pady=2)
-
-        # Рамка для текста
-        frame = tk.Frame(self.root)
-        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-
-        # Текст для проверки
-        tk.Label(frame, text="Текст для проверки:").pack(anchor=tk.W)
-        self.text_input = scrolledtext.ScrolledText(frame, height=8)
-        self.text_input.pack(fill=tk.BOTH, expand=True, pady=5)
-
-        # Кнопка загрузки из файла
-        load_btn = tk.Button(frame, text="Загрузить текст из файла", command=self.load_from_file)
-        load_btn.pack(pady=2)
-
-        # Настройки
-        settings_frame = tk.Frame(self.root)
-        settings_frame.pack(pady=5)
-
-        tk.Label(settings_frame, text="Длина шингла:").pack(side=tk.LEFT)
-        self.shingle_size_entry = tk.Entry(settings_frame, width=5)
-        self.shingle_size_entry.insert(0, "3")
-        self.shingle_size_entry.pack(side=tk.LEFT, padx=5)
-
-        # Кнопка проверки
-        check_btn = tk.Button(settings_frame, text="Проверить уникальность", command=self.check)
-        check_btn.pack(side=tk.LEFT, padx=10)
-
-        # Результаты
-        result_frame = tk.Frame(self.root)
-        result_frame.pack(fill=tk.X, padx=10, pady=5)
-
-        self.result_label = tk.Label(result_frame, text="Уникальность: --%", font=("Arial", 14, "bold"))
-        self.result_label.pack()
-
-        self.source_label = tk.Label(result_frame, text="Источник: --", font=("Arial", 10))
-        self.source_label.pack()
-
-        # Лог (для отладки)
-        log_frame = tk.Frame(self.root)
-        log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-
-        tk.Label(log_frame, text="Лог выполнения:").pack(anchor=tk.W)
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=6, state=tk.DISABLED)
-        self.log_text.pack(fill=tk.BOTH, expand=True)
-
-    def log(self, message):
-        """Добавляет сообщение в лог-область"""
-        self.log_text.config(state=tk.NORMAL)
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.see(tk.END)
-        self.log_text.config(state=tk.DISABLED)
+    def wr(self, msg):
+        self.log.config(state=tk.NORMAL)
+        self.log.insert(tk.END, msg + "\n")
+        self.log.see(tk.END)
+        self.log.config(state=tk.DISABLED)
         self.root.update()
 
-    def refresh_library(self):
-        self.library = load_library_from_folder("library")
-        self.lib_status = f"Библиотека: {len(self.library)} файлов загружено"
-        # Обновляем надпись (нужно пересоздать или обновить, для простоты можно просто показать в логе)
-        self.log(f"Библиотека обновлена. Загружено файлов: {len(self.library)}")
+    def ref(self):
+        self.lib = load("library")
+        self.st = f"Файлов: {len(self.lib)}"
+        self.wr(f"Обновлено. Загружено: {len(self.lib)}")
 
-    def load_from_file(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
-        if file_path:
+    def get(self):
+        p = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
+        if p:
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                self.text_input.delete(1.0, tk.END)
-                self.text_input.insert(1.0, content)
-                self.log(f"Загружен файл: {file_path}")
+                with open(p, 'r', encoding='utf-8') as f:
+                    data = f.read()
+                self.t_in.delete(1.0, tk.END)
+                self.t_in.insert(1.0, data)
+                self.wr(f"Загружен: {p}")
             except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось загрузить файл: {e}")
+                messagebox.showerror("Ошибка", f"Не удалось: {e}")
 
-    def check(self):
-        # Получаем текст из поля ввода
-        raw_text = self.text_input.get("1.0", tk.END).strip()
-        if not raw_text:
-            messagebox.showwarning("Предупреждение", "Введите текст для проверки!")
+    def run(self):
+        raw = self.t_in.get("1.0", tk.END).strip()
+        if not raw:
+            messagebox.showwarning("Внимание", "Введите текст!")
             return
-
-        # Получаем длину шингла
         try:
-            shingle_size = int(self.shingle_size_entry.get())
-            if shingle_size < 1:
+            n = int(self.n_in.get())
+            if n < 1:
                 raise ValueError
         except:
-            messagebox.showerror("Ошибка", "Длина шингла должна быть положительным целым числом")
+            messagebox.showerror("Ошибка", "Шингл > 0")
             return
-
-        # Проверяем, загружена ли библиотека
-        if not self.library:
-            messagebox.showwarning("Предупреждение", "Библиотека пуста. Добавьте .txt файлы в папку 'library'")
+        if not self.lib:
+            messagebox.showwarning("Внимание", "Библиотека пуста")
             return
-
-        # Очищаем лог
-        self.log_text.config(state=tk.NORMAL)
-        self.log_text.delete(1.0, tk.END)
-        self.log_text.config(state=tk.DISABLED)
-
-        self.log("="*50)
-        self.log("НАЧАЛО ПРОВЕРКИ")
-        self.log(f"Длина шингла: {shingle_size}")
-        self.log(f"Размер библиотеки: {len(self.library)} файлов")
-
-        # Обработка проверяемого текста
-        self.log("Этап 1: Предобработка текста...")
-        check_words = preprocess_text(raw_text)
-        self.log(f"  Получено слов: {len(check_words)}")
-
-        if len(check_words) < shingle_size:
-            messagebox.showerror("Ошибка", "Текст слишком короткий для выбранной длины шингла")
+        self.log.config(state=tk.NORMAL)
+        self.log.delete(1.0, tk.END)
+        self.log.config(state=tk.DISABLED)
+        self.wr("="*50)
+        self.wr("СТАРТ")
+        self.wr(f"Шингл: {n}")
+        self.wr(f"Файлов: {len(self.lib)}")
+        self.wr("Шаг 1: Обработка...")
+        w = clr(raw)
+        self.wr(f"  Слов: {len(w)}")
+        if len(w) < n:
+            messagebox.showerror("Ошибка", "Слишком коротко")
             return
-
-        # Проверка по библиотеке
-        self.log("Этап 2: Сравнение с библиотекой...")
-        min_uniqueness, worst_source = check_text_against_library(check_words, self.library, shingle_size)
-
-        # Вывод результатов
-        self.log("Этап 3: Анализ завершен")
-        self.log(f"  Итоговая уникальность: {min_uniqueness}%")
-        self.log(f"  Основной источник заимствований: {worst_source}")
-        self.log("="*50)
-
-        self.result_label.config(text=f"Уникальность: {min_uniqueness}%")
-        self.source_label.config(text=f"Источник: {worst_source}")
+        self.wr("Шаг 2: Сравнение...")
+        u, src = chk(w, self.lib, n)
+        self.wr("Шаг 3: Готово")
+        self.wr(f"  Уникальность: {u}%")
+        self.wr(f"  Источник: {src}")
+        self.wr("="*50)
+        self.r1.config(text=f"Уникальность: {u}%")
+        self.r2.config(text=f"Источник: {src}")
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = AntiplagiatApp(root)
+    app = App(root)
     root.mainloop()
