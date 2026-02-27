@@ -67,7 +67,7 @@ def chk(w, lib, n):
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("Антиплагиат")
+        self.root.title("Антиплагиат.СШ")
         self.root.geometry("750x600")
         self.lib = load("library")
         self.st = f"Файлов: {len(self.lib)}"
